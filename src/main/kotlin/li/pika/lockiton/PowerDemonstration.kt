@@ -6,28 +6,32 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 
 
-data class PowerDemonstration(val conninfo: URI = URI("postgres:///"),
+data class PowerDemonstration(val conninfo: URI,
                               val duration: Duration = Duration.ofSeconds(100),
                               val batchSize: Int = 8): Runnable {
     var count: Int = 0
+    var locks: Int = 0
+
+    val db: DB by lazy {
+        DB(conninfo)
+    }
 
     override fun run() {
-        // val db = TODO("Connect to Database")
-        val start = t()
-        while (Duration.between(start, t()) < duration) {
+        val begin = t()
+        while (Duration.between(begin, t()) < duration) {
             val start = System.nanoTime()
             count += 1
-            // val locks = lockSome()
+            locks += lockSome()
             val duration = System.nanoTime() - start
-            Thread.sleep(duration / 1000, (duration % 1000).toInt())
+            val millis = duration / 1000000
+            val nanos = duration % 1000000
+            Thread.sleep(millis, nanos.toInt())
         }
     }
 
     fun lockSome(): Int {
-        TODO("Lock and count locks.")
+        return db.obtain().size
     }
 
-    fun t(): OffsetDateTime {
-        return OffsetDateTime.now(ZoneId.of("UTC"))
-    }
+    fun t(): OffsetDateTime = OffsetDateTime.now(ZoneId.of("UTC"))
 }

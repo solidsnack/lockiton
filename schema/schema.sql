@@ -2,7 +2,7 @@ CREATE UNLOGGED TABLE lock (
   token             int PRIMARY KEY,
   queue             text NOT NULL DEFAULT '?'
 );
-CREATE INDEX "lock/of" ON lock (of);
+CREATE INDEX "lock/queue" ON lock (queue);
 
 CREATE TABLE token (
   token             serial PRIMARY KEY,
@@ -16,20 +16,20 @@ CREATE TABLE job (
   data              jsonb NOT NULL DEFAULT '{}'
 );
 
-CREATE FUNCTION obtain(queue text, n int DEFAULT 8)
+CREATE FUNCTION obtain(queue text DEFAULT '*', n int DEFAULT 8)
 RETURNS TABLE (token int) AS $$
   DELETE FROM lock WHERE token IN (
     SELECT token FROM lock
-     WHERE lock.queue = obtain.queue
+     WHERE obtain.queue = '*' OR lock.queue = obtain.queue
        FOR NO KEY UPDATE SKIP LOCKED
      LIMIT n
   ) RETURNING token
-$$ LANGUAGE sql;
+$$ LANGUAGE sql STRICT;
 
-CREATE FUNCTION redeem(token int) RETURNS job AS $$
---- Record redemption.
---- Return corresponding job.
-$$ LANGUAGE sql;
+--CREATE FUNCTION redeem(token int) RETURNS job AS $$
+----- Record redemption.
+----- Return corresponding job.
+--$$ LANGUAGE sql;
 
 CREATE FUNCTION renew(token int) RETURNS boolean AS $$
   SELECT NOT EXISTS (SELECT * FROM lock WHERE lock.token = renew.token)
