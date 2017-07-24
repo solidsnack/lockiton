@@ -75,7 +75,8 @@ class DB(val conninfo: URI) {
     }
 
     fun<T> retry(block: () -> T): T {
-        val limit = 4
+        val start = System.nanoTime()
+        val limit = 1024
         var n = 1
         while (n < limit) {
             n += 1
@@ -87,8 +88,11 @@ class DB(val conninfo: URI) {
                 // including rollback, integrity, serializable...
                 if (!e.sqlState.startsWith("40")) throw e
             }
+            val duration = System.nanoTime() - start
+            val millis = duration / 1000000
+            val nanos = duration % 1000000
+            Thread.sleep(millis, nanos.toInt())
         }
-        println("Final attempt...")
         return txn { block() }
     }
 }
