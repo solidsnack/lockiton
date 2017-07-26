@@ -4,8 +4,13 @@ import java.net.URI
 import java.sql.*
 import java.util.*
 
+import com.github.kittinunf.result.Result
+
 
 class DB(val conninfo: URI) {
+    private var inTransaction: Boolean = false
+    private var inRetry: Boolean = false
+
     private val jdbcURI: String by lazy {
         "jdbc:postgresql://" + if (conninfo.port >= 0) {
             "${conninfo.host}:${conninfo.port}${conninfo.path}"
@@ -42,19 +47,16 @@ class DB(val conninfo: URI) {
     @Synchronized
     fun obtain(): Array<Int> {
         var results: Array<Int> = arrayOf()
-        val rows = retry {
-            prepared.obtain.executeQuery()
-        }
-        while (rows.next()) {
-            results += rows.getInt(1)
-        }
+        val res = txn { prepared.obtain.executeQuery() }
+        val rows = res.get()
+        while (rows.next()) { results += rows.getInt(1) }
         rows.close()
         return results
     }
 
     @Synchronized
     fun release(tokens: Array<Int>) {
-        retry {
+        txn {
             for (token in tokens) {
                 prepared.release.setInt(1, token)
                 prepared.release.addBatch()
@@ -63,36 +65,49 @@ class DB(val conninfo: URI) {
         }
     }
 
-    fun<T> txn(block: () -> T): T {
+    @Synchronized
+    fun<T: Any> txn(block: () -> T): Result<T, SQLException> {
+        if (inTransaction) return Result.Success(block())
+
+        inTransaction = true
+
         try {
             val data = block()
             cxn.commit()
-            return data
+            return Result.Success(data)
         } catch (e: SQLException) {
             cxn.rollback()
-            throw e
+            // The "class 40" exceptions are all transaction related,
+            // including rollback, integrity, serializable...
+            if (!e.sqlState.startsWith("40")) throw e
+            return Result.error(e)
+        } finally {
+            inTransaction = false
         }
     }
 
-    fun<T> retry(block: () -> T): T {
-        val start = System.nanoTime()
-        val limit = 1024
-        var n = 1
-        while (n < limit) {
-            n += 1
-            try {
-                return txn { block() }
-            } catch (e: SQLException) {
-                cxn.rollback()
-                // The "class 40" exceptions are all transaction related,
-                // including rollback, integrity, serializable...
-                if (!e.sqlState.startsWith("40")) throw e
+    @Synchronized
+    fun<T: Any> retry(block: () -> T): T {
+        if (inRetry) return block()
+
+        inRetry = true
+
+        try {
+            val start = System.nanoTime()
+            val limit = 1024
+            var n = 1
+            while (n < limit) {
+                n += 1
+                val res = txn { block() }
+                when (res) {
+                    is Result.Success -> return res.value
+                }
+                SystemNanos.sleep(System.nanoTime() - start)
             }
-            val duration = System.nanoTime() - start
-            val millis = duration / 1000000
-            val nanos = duration % 1000000
-            Thread.sleep(millis, nanos.toInt())
+            val res = txn { block() }
+            return res.get()
+        } finally {
+            inRetry = false
         }
-        return txn { block() }
     }
 }

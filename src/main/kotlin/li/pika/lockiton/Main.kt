@@ -1,6 +1,7 @@
 package li.pika.lockiton
 
 import java.net.URI
+import java.time.Duration
 import kotlin.concurrent.fixedRateTimer
 
 
@@ -8,26 +9,22 @@ fun main(args: Array<String>) {
     val conninfo = if (args.isNotEmpty()) args[0] else "postgres:///"
     val tasks = Array(8) { PowerDemonstration(URI(conninfo)) }
     val threads = tasks.map { task -> Thread(task) }
-    var lastCounts: List<Int> = listOf()
     val start = System.nanoTime()
-
-    fun printCounts() {
-        val counts = tasks.map { task -> task.count }
-        val seconds = (System.nanoTime() - start).toDouble() / 1000000000
-        val rate = (counts.sum() / seconds) / 1000
-        val timing = "%4.1fkHz for %6.2fs".format(rate, seconds)
-        if (counts != lastCounts) println("Counts ($timing): $counts")
-        lastCounts = counts
-    }
 
     for (thread in threads) thread.start()
 
-
     fixedRateTimer(daemon = true, initialDelay = 1000, period = 1000) {
-        printCounts()
+        val dur: List<Duration> = TransactionTiming.dur
+        val durMsg = "1s/2s/5s"
+        val formatted = tasks.map {
+            val timings = TransactionTiming.analyze(it.timingsSnapshot, dur)
+            timings?.map({ "%.2f".format(it.value.tps) })
+                    ?.joinToString("/") ?: "-"
+        }
+        val seconds = (System.nanoTime() - start).toDouble() / 1000000000
+        val t = "T+%06.2fs".format(seconds)
+        println("$t TPS ($durMsg): ${formatted.joinToString(" ")}")
     }
 
     for (thread in threads) thread.join()
-
-    printCounts()
 }

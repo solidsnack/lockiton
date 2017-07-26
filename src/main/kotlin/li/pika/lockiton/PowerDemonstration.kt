@@ -2,39 +2,58 @@ package li.pika.lockiton
 
 import java.net.URI
 import java.time.Duration
-import java.time.OffsetDateTime
-import java.time.ZoneId
 
 
 data class PowerDemonstration(val conninfo: URI,
                               val duration: Duration = Duration.ofSeconds(100),
                               val batchSize: Int = 8): Runnable {
-    var count: Int = 0
-    var locks: Int = 0
-    var tokens: Array<Int> = arrayOf()
+    private var locks: Int = 0
+    private var tokens: Array<Int> = arrayOf()
+
+    private var timings: Array<LongArray> = emptyArray()
+
+    val count: Int
+        get() = timings.size
+
+    val timingsSnapshot: List<TransactionTiming>
+        get() = timings.clone().map { TransactionTiming.fromNanoTimings(it) }
 
     val db: DB by lazy {
         DB(conninfo)
     }
 
     override fun run() {
-        val begin = t()
-        while (Duration.between(begin, t()) < duration) {
+        val nanoDuration = duration.toNanos()
+        val begin = System.nanoTime()
+
+        var sleep = {
             val start = System.nanoTime()
-            count += 1
             locks += lockSome()
-            val duration = System.nanoTime() - start
-            val millis = duration / 1000000
-            val nanos = duration % 1000000
-            Thread.sleep(millis, nanos.toInt())
+            System.nanoTime() - start
+        }()
+
+        while (System.nanoTime() - begin < nanoDuration) {
+            SystemNanos.sleep(sleep)
+            locks += lockSome()
+            val retries = timings.takeLast(10).map { maxOf(0,it.size - 2) }
+
+            if (retries.average() > 0.1) {
+                sleep *= 2
+            } else {
+                sleep = (0.9 * sleep).toLong()
+            }
         }
     }
 
     fun lockSome(): Int {
-        db.release(tokens)
-        tokens = db.obtain()
+        var times: LongArray = longArrayOf()
+        tokens = db.retry {
+            times += System.nanoTime()
+            db.release(tokens)
+            db.obtain()
+        }
+        times += System.nanoTime()
+        timings += times
         return tokens.size
     }
-
-    fun t(): OffsetDateTime = OffsetDateTime.now(ZoneId.of("UTC"))
 }
