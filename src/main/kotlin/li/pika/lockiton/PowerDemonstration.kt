@@ -12,9 +12,6 @@ data class PowerDemonstration(val conninfo: URI,
 
     private var timings: Array<LongArray> = emptyArray()
 
-    val count: Int
-        get() = timings.size
-
     val timingsSnapshot: List<TransactionTiming>
         get() = timings.clone().map { TransactionTiming.fromNanoTimings(it) }
 
@@ -35,13 +32,14 @@ data class PowerDemonstration(val conninfo: URI,
         while (System.nanoTime() - begin < nanoDuration) {
             SystemNanos.sleep(sleep)
             locks += lockSome()
-            val retries = timings.takeLast(10).map { maxOf(0,it.size - 2) }
 
+            val retries = timings.takeLast(10).map { maxOf(0,it.size - 2) }
             if (retries.average() > 0.1) {
                 sleep *= 2
             } else {
                 sleep = (0.9 * sleep).toLong()
             }
+            // println("Retries: $retries Sleep: ${sleep / 1000000000.0}")
         }
     }
 

@@ -32,13 +32,13 @@ data class TransactionTiming(val start: OffsetDateTime,
                 get() = Duration.between(start, end).toNanos()
 
             val idle: Double
-                get() = 1 - (nominalDuration.toDouble() / nanos)
+                get() = 1 - (nominalDuration / nanos.toDouble())
 
             val tps: Double
-                get() = records.toDouble() / (nanos / 1000000000)
+                get() = records / (nanos.toDouble() / 1000000000)
 
             val retryRatio: Double
-                get() = retries.toDouble() / records
+                get() = retries / records.toDouble()
         }
 
         val dur = listOf(Duration.ofSeconds(1),
