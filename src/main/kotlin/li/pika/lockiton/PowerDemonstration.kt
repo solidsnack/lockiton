@@ -12,7 +12,9 @@ data class PowerDemonstration(val conninfo: URI,
     private var timings: Array<LongArray> = emptyArray()
 
     val timingsSnapshot: List<TransactionTiming>
-        get() = timings.clone().map { TransactionTiming.fromNanoTimings(it) }
+        get() = synchronized(timings) {
+            timings.clone().map { TransactionTiming.fromNanoTimings(it) }
+        }
 
     private val db: DB by lazy { DB(conninfo) }
 
@@ -26,6 +28,13 @@ data class PowerDemonstration(val conninfo: URI,
         }
     }
 
+    private fun postTiming(times: LongArray) {
+        synchronized(timings) {
+            if (timings.size >= 8192) timings = emptyArray()
+            timings += times
+        }
+    }
+
     private fun lockSome(): Int {
         var times: LongArray = longArrayOf()
         tokens = db.retry {
@@ -34,7 +43,7 @@ data class PowerDemonstration(val conninfo: URI,
             obtain()
         }
         times += System.nanoTime()
-        timings += times
+        postTiming(times)
         return tokens.size
     }
 }
