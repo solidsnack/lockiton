@@ -32,7 +32,7 @@ data class TransactionTiming(val start: OffsetDateTime,
                 get() = Duration.between(start, end).toNanos()
 
             val idle: Double
-                get() = 1 - (nominalDuration.sum() / nanos.toDouble())
+                get() = 1 - (nominalDuration.sum() / duration.sum().toDouble())
 
             val tps: Double
                 get() = records.size / (nanos.toDouble() / 1000000000)
