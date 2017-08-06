@@ -26,7 +26,8 @@ RETURNS TABLE (token int) AS $$
                   WHERE token IN (SELECT token FROM free
                                    WHERE obtain.queue = '*'
                                       OR free.queue = obtain.queue
-                                     FOR UPDATE SKIP LOCKED
+                                     -- TODO: Does not make any difference?
+                                     -- FOR UPDATE SKIP LOCKED
                                    LIMIT n)
                  RETURNING token, queue)
   INSERT INTO held (token, queue) SELECT * FROM taken RETURNING token
