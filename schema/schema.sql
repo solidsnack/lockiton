@@ -45,8 +45,7 @@ $$ LANGUAGE sql;
 CREATE FUNCTION release(token int) RETURNS void AS $$
   WITH taken AS (DELETE FROM held
                   WHERE token IN (SELECT token FROM held
-                                   WHERE held.token = release.token
-                                     FOR UPDATE SKIP LOCKED)
+                                   WHERE held.token = release.token)
                  RETURNING token, queue)
   INSERT INTO free (token, queue) SELECT * FROM taken
 $$ LANGUAGE sql;
