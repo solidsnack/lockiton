@@ -158,7 +158,7 @@ class DB(val conninfo: URI) {
         }
     }
 
-    class RetriedTooManyTimes(override val cause: SQLException):
+    class RetriedTooManyTimes(override val cause: SQLException) :
             SQLException("Too many attempts for retriable transaction.",
                          cause.sqlState)
 }

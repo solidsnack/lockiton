@@ -8,13 +8,14 @@ data class PowerDemonstration(val conninfo: URI,
                               val duration: Duration = Duration.ofSeconds(100),
                               val batchSize: Int = 8): Runnable {
     private var locks: Int = 0
-    private var tokens: Array<Int> = arrayOf()
-    private var timings: Array<LongArray> = emptyArray()
+    private var tokens: Array<Int> = emptyArray()
+    private var timings: Array<SystemNanos.Timing> = emptyArray()
 
-    val timingsSnapshot: List<TransactionTiming>
-        get() = synchronized(timings) {
-            timings.clone().map { TransactionTiming.fromNanoTimings(it) }
-        }
+    fun handOverTimings(): Array<SystemNanos.Timing> = synchronized(timings) {
+        val old = timings.clone()
+        timings = emptyArray()
+        old
+    }
 
     private val db: DB by lazy { DB(conninfo) }
 
@@ -28,10 +29,9 @@ data class PowerDemonstration(val conninfo: URI,
         }
     }
 
-    private fun postTiming(times: LongArray) {
+    private fun postTiming(timing: SystemNanos.Timing) {
         synchronized(timings) {
-            if (timings.size >= 8192) timings = emptyArray()
-            timings += times
+            timings += timing
         }
     }
 
@@ -43,7 +43,7 @@ data class PowerDemonstration(val conninfo: URI,
             obtain()
         }
         times += System.nanoTime()
-        postTiming(times)
+        postTiming(SystemNanos.Timing(times))
         return tokens.size
     }
 }
